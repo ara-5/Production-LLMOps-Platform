@@ -1,0 +1,51 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-llmops}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-llmops}
+      POSTGRES_DB: ${POSTGRES_DB:-llmops}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-llmops}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+psycopg://llmops:llmops@postgres:5432/llmops}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      DEFAULT_MODEL: ${DEFAULT_MODEL:-claude-sonnet-5}
+      JUDGE_MODEL: ${JUDGE_MODEL:-claude-opus-5}
+      BACKEND_INTERNAL_URL: http://localhost:8000
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./seed:/app/seed:ro
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${FRONTEND_PORT:-5173}:80"
+
+volumes:
+  pgdata:
