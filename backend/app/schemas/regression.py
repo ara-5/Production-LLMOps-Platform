@@ -20,6 +20,7 @@ class RegressionRunOut(BaseModel):
     prompt_version_id: int
     model_id: str
     baseline_run_id: int | None
+    is_baseline: bool
     status: str
     summary: dict
     started_at: datetime

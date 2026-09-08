@@ -22,5 +22,8 @@ LLMOPS_EFFORT = "llmops.effort"
 LLMOPS_THINKING_TYPE = "llmops.thinking.type"
 LLMOPS_RETRIEVAL_DOC_IDS = "llmops.retrieval.doc_ids"
 LLMOPS_RETRIEVAL_SCORES = "llmops.retrieval.scores"
+LLMOPS_RETRIEVAL_CONTEXT = "llmops.retrieval.context"
+LLMOPS_QUESTION = "llmops.input.question"
+LLMOPS_ANSWER = "llmops.output.answer"
 
 ANTHROPIC_SYSTEM = "anthropic"
