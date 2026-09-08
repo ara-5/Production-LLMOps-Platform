@@ -121,7 +121,7 @@ DATABASE_URL=postgresql+psycopg://llmops:llmops@localhost:5432/llmops \
     pytest backend/tests sdk/tests -v
 ```
 
-31 tests covering: cost calculation against the pricing table (including cache read/write rates), retrieval-quality metrics against hand-computed fixtures, regression baseline-comparison threshold logic, the SDK's trace/span capture against a mocked Anthropic stream, and the traces ingest/query API end-to-end against a real Postgres instance. CI (`.github/workflows/ci.yml`) runs the same suite against a Postgres service container on every push.
+31 tests covering: cost calculation against the pricing table (including cache read/write rates), retrieval-quality metrics against hand-computed fixtures, regression baseline-comparison threshold logic, the SDK's trace/span capture against a mocked Anthropic stream, and the traces ingest/query API end-to-end against a real Postgres instance. `.github/workflows/ci.yml` runs the same suite plus a frontend type-check/build against a Postgres service container — it's set to manual trigger (`workflow_dispatch`) rather than running on every push, so it's there to run on demand from the Actions tab without consuming CI minutes automatically.
 
 ## Project layout
 
