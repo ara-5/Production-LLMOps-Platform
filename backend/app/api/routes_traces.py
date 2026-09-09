@@ -3,7 +3,6 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models.evals import EvalScore
 from app.models.traces import Span, Trace
 from app.schemas.traces import IngestPayload, SpanOut, TraceDetail, TraceListResponse
 

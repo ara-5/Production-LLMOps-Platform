@@ -1,5 +1,11 @@
 # Production LLMOps Platform
 
+![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)
+![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)
+![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688.svg)
+![React + TypeScript](https://img.shields.io/badge/frontend-React%20%2B%20TypeScript-61dafb.svg)
+![Docker Compose](https://img.shields.io/badge/deploy-Docker%20Compose-2496ed.svg)
+
 A self-hosted LLM observability, evaluation, and regression-testing platform for Claude-powered applications — the kind of system a team running an LLM feature in production needs in 2026/2027: full request tracing, cost/latency/token accounting, LLM-as-judge quality scoring, retrieval-quality metrics, prompt/model version tracking, and a CI-style regression gate for prompt changes.
 
 It ships as a working system, not a slide deck: a real instrumentation SDK, a FastAPI backend with a Postgres schema modeled on OpenTelemetry's GenAI semantic conventions, an LLM-as-judge evaluation engine using structured outputs, a regression-testing workflow with statistical baseline comparison, an instrumented demo RAG application, and a React dashboard — all wired together and runnable with `docker compose up`.
@@ -21,6 +27,60 @@ It ships as a working system, not a slide deck: a real instrumentation SDK, a Fa
 | **Evaluation datasets** | Versioned golden Q&A datasets with expected answers + expected retrieval doc IDs |
 | **Regression testing** | Run a dataset against a prompt/model version, score it, and compare to a stored baseline with per-metric pass/fail thresholds — a CLI exit code makes it usable as a CI gate ([`scripts/run_regression.py`](scripts/run_regression.py)) |
 | **Provider resilience** | Optional local **Ollama fallback** for the demo app — if Claude errors out (or no key is configured), the pipeline retries on a local model and the trace records the failover ([see below](#local-ollama-fallback)) |
+
+## Screenshots
+
+All screenshots below are the real running app, seeded with 14 days of synthetic traffic (~1,500 traces) plus one genuine live trace against a local Ollama fallback — nothing here is mocked up.
+
+<p>
+  <img src="docs/screenshots/01-overview.png" width="850" alt="Overview dashboard: request count, error rate, latency, TTFT, cost, and token KPIs, with latency and cost trend charts and a recent-failures table">
+  <br><sub><b>Overview</b> — fleet-wide KPIs and trends across the last 14 days.</sub>
+</p>
+
+<p>
+  <img src="docs/screenshots/02-traces.png" width="850" alt="Traces explorer table showing per-request status, model, latency, TTFT, tokens, and cost, with a live trace tagged FALLBACK">
+  <br><sub><b>Traces explorer</b> — every request, filterable by status/model. Top row is a genuine live trace tagged <code>FALLBACK</code> (Claude failed, Ollama recovered it — see below).</sub>
+</p>
+
+<p>
+  <img src="docs/screenshots/09-trace-detail.png" width="850" alt="Trace detail page showing a span waterfall and a full table of LLM-as-judge and retrieval-quality evaluation scores">
+  <br><sub><b>Trace detail</b> — span waterfall plus every eval score (hallucination, faithfulness, relevance, precision@k/recall@k/MRR/NDCG) for that request, with the judge model that produced each.</sub>
+</p>
+
+<p>
+  <img src="docs/screenshots/10-trace-detail-fallback.png" width="850" alt="Trace detail page showing a failed Claude span in red immediately followed by a successful Ollama fallback span, tagged FALLBACK">
+  <br><sub><b>Fallback in action</b> — same trace, two attempts: the failed Claude span (red) and the successful local-Ollama span that recovered it, both in one waterfall.</sub>
+</p>
+
+<p>
+  <img src="docs/screenshots/03-evaluations.png" width="850" alt="Evaluations page showing mean score bar chart across all seven quality metrics plus a detail table with pass rates">
+  <br><sub><b>Evaluations</b> — score distributions and pass rates across every metric, aggregated over all scored traces.</sub>
+</p>
+
+<p>
+  <img src="docs/screenshots/07-costs.png" width="850" alt="Costs page showing total spend, cache-read savings, a per-model cost bar chart, and a detail table — including a $0.00 Ollama row">
+  <br><sub><b>Costs</b> — spend by model with prompt-cache savings called out. Note the <code>ollama:llama3.2:3b</code> row costing exactly $0.</sub>
+</p>
+
+<details>
+<summary><b>More screenshots</b> — Prompt Registry, Datasets, Regression Tests, Annotations</summary>
+<p>
+  <img src="docs/screenshots/04-prompts.png" width="850" alt="Prompt registry page with version history, diff selector, and a new-version form">
+  <br><sub>Prompt registry — version history, diffing, rollback.</sub>
+</p>
+<p>
+  <img src="docs/screenshots/05-datasets.png" width="850" alt="Datasets page listing golden Q&A items with expected answers and expected retrieval document IDs">
+  <br><sub>Golden Q&A dataset — the ground truth used for evaluation and regression testing.</sub>
+</p>
+<p>
+  <img src="docs/screenshots/06-regression.png" width="850" alt="Regression testing page with a run-configuration form and a run history table showing a passed baseline run">
+  <br><sub>Regression testing — configure and run a dataset against a prompt/model version.</sub>
+</p>
+<p>
+  <img src="docs/screenshots/08-annotations.png" width="850" alt="Annotation queue page listing recent traces with an Annotate action">
+  <br><sub>Annotation queue — human review to build ground truth for future eval datasets.</sub>
+</p>
+</details>
 
 ## Architecture
 
@@ -137,6 +197,8 @@ DATABASE_URL=postgresql+psycopg://llmops:llmops@localhost:5432/llmops \
 ```
 
 35 tests covering: cost calculation against the pricing table (including cache read/write rates and the Ollama free tier), retrieval-quality metrics against hand-computed fixtures, regression baseline-comparison threshold logic, the SDK's trace/span capture against both a mocked Anthropic stream and a mocked Ollama NDJSON stream (including the fallback-attribution behavior itself), and the traces ingest/query API end-to-end against a real Postgres instance. `.github/workflows/ci.yml` runs the same suite plus a frontend type-check/build against a Postgres service container — it's set to manual trigger (`workflow_dispatch`) rather than running on every push, so it's there to run on demand from the Actions tab without consuming CI minutes automatically.
+
+**Linting:** `ruff check backend sdk demo_app scripts` (Python — config in the root `pyproject.toml`) and `cd frontend && npm run lint` (TypeScript/React, flat config in `frontend/eslint.config.js`). Both are clean as of this commit.
 
 ## Project layout
 

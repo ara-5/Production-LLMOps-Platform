@@ -24,10 +24,11 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Any, Iterator, Optional
+from datetime import UTC, datetime
+from typing import Any
 
 import anthropic
 import httpx
@@ -41,7 +42,7 @@ def _now_ms() -> float:
 
 
 def _iso(ts: float) -> str:
-    return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
+    return datetime.fromtimestamp(ts, tz=UTC).isoformat()
 
 
 def _classify_error(exc: BaseException, provider: str = "anthropic") -> str:
@@ -76,7 +77,7 @@ class LLMCallResult:
     cache_read_tokens: int
     cache_creation_tokens: int
     cost_usd: float
-    stop_reason: Optional[str] = None
+    stop_reason: str | None = None
     provider: str = "anthropic"
 
 
@@ -86,11 +87,11 @@ class _SpanRecord:
     name: str
     span_kind: str
     started_at: float
-    parent_span_id: Optional[str] = None
-    ended_at: Optional[float] = None
-    latency_ms: Optional[int] = None
+    parent_span_id: str | None = None
+    ended_at: float | None = None
+    latency_ms: int | None = None
     status: str = "ok"
-    status_message: Optional[str] = None
+    status_message: str | None = None
     input_tokens: int = 0
     output_tokens: int = 0
     cache_read_tokens: int = 0
@@ -148,11 +149,11 @@ class SpanContext:
 class TraceContext:
     def __init__(
         self,
-        trace_client: "TraceClient",
+        trace_client: TraceClient,
         name: str,
-        prompt_version_id: Optional[int],
-        dataset_item_id: Optional[int],
-        tags: Optional[dict],
+        prompt_version_id: int | None,
+        dataset_item_id: int | None,
+        tags: dict | None,
     ):
         self.trace_client = trace_client
         self.trace_id = str(uuid.uuid4())
@@ -161,9 +162,9 @@ class TraceContext:
         self.dataset_item_id = dataset_item_id
         self.tags = tags or {}
         self.started_at = time.time()
-        self.ended_at: Optional[float] = None
+        self.ended_at: float | None = None
         self.status = "ok"
-        self.error_type: Optional[str] = None
+        self.error_type: str | None = None
         self.retry_count = 0
         self.spans: list[_SpanRecord] = []
         self._span_stack: list[str] = []
@@ -196,12 +197,12 @@ class TraceContext:
         *,
         model: str,
         messages: list[dict],
-        system: Optional[str],
+        system: str | None,
         max_tokens: int,
-        thinking: Optional[dict],
-        output_config: Optional[dict],
+        thinking: dict | None,
+        output_config: dict | None,
         extra_kwargs: dict,
-    ) -> tuple[Any, str, int, int, int, int, Optional[str], str, Optional[float], float]:
+    ) -> tuple[Any, str, int, int, int, int, str | None, str, float | None, float]:
         request_kwargs: dict[str, Any] = dict(model=model, max_tokens=max_tokens, messages=messages, **extra_kwargs)
         if system is not None:
             request_kwargs["system"] = system
@@ -210,7 +211,7 @@ class TraceContext:
         if output_config is not None:
             request_kwargs["output_config"] = output_config
 
-        t_first_token: Optional[float] = None
+        t_first_token: float | None = None
         with self.trace_client.anthropic.messages.stream(**request_kwargs) as stream:
             for event in stream:
                 if t_first_token is None and event.type == "content_block_delta":
@@ -236,10 +237,10 @@ class TraceContext:
         base_url: str,
         model: str,
         messages: list[dict],
-        system: Optional[str],
+        system: str | None,
         max_tokens: int,
-    ) -> tuple[Any, str, int, int, int, int, Optional[str], str, Optional[float], float]:
-        ollama_model = model[len(OLLAMA_MODEL_PREFIX):] if model.startswith(OLLAMA_MODEL_PREFIX) else model
+    ) -> tuple[Any, str, int, int, int, int, str | None, str, float | None, float]:
+        ollama_model = model.removeprefix(OLLAMA_MODEL_PREFIX)
         payload_messages = list(messages)
         if system is not None:
             payload_messages = [{"role": "system", "content": system}] + payload_messages
@@ -251,7 +252,7 @@ class TraceContext:
             "options": {"num_predict": max_tokens},
         }
 
-        t_first_token: Optional[float] = None
+        t_first_token: float | None = None
         text_parts: list[str] = []
         input_tokens = 0
         output_tokens = 0
@@ -287,12 +288,12 @@ class TraceContext:
         *,
         model: str,
         messages: list[dict],
-        system: Optional[str] = None,
+        system: str | None = None,
         max_tokens: int = 16000,
-        thinking: Optional[dict] = None,
-        output_config: Optional[dict] = None,
+        thinking: dict | None = None,
+        output_config: dict | None = None,
         provider: str = "anthropic",
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
         span_kind: str = "llm",
         span_name: str = "llm.generate",
         **kwargs: Any,
@@ -371,7 +372,7 @@ class TraceContext:
                 provider=provider,
             )
 
-    def _primary_llm_span(self) -> Optional[_SpanRecord]:
+    def _primary_llm_span(self) -> _SpanRecord | None:
         """The span that actually produced the result shown to the user —
         the last successful llm/judge call, so a failed-then-fallback
         sequence attributes model_id/ttft/tokens_per_sec to the call that
@@ -424,7 +425,7 @@ class TraceClient:
     def __init__(
         self,
         backend_url: str,
-        anthropic_client: Optional[anthropic.Anthropic] = None,
+        anthropic_client: anthropic.Anthropic | None = None,
         ship: bool = True,
     ):
         self.backend_url = backend_url.rstrip("/")
@@ -438,9 +439,9 @@ class TraceClient:
         self,
         name: str,
         *,
-        prompt_version_id: Optional[int] = None,
-        dataset_item_id: Optional[int] = None,
-        tags: Optional[dict] = None,
+        prompt_version_id: int | None = None,
+        dataset_item_id: int | None = None,
+        tags: dict | None = None,
         on_complete=None,
     ) -> Iterator[TraceContext]:
         ctx = TraceContext(self, name, prompt_version_id, dataset_item_id, tags)

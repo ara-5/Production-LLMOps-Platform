@@ -40,7 +40,9 @@ def _resolve_prompt_version(db: Session, prompt_version_id: int | None) -> Promp
 
 @router.post("/ask", response_model=AskResponse)
 def ask(payload: AskRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
-    from demo_app.rag_pipeline import answer_question  # local import: keeps demo_app decoupled from api package
+    from demo_app.rag_pipeline import (
+        answer_question,  # local import: keeps demo_app decoupled from api package
+    )
 
     settings = get_settings()
     if not settings.anthropic_api_key and not settings.enable_ollama_fallback:

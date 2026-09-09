@@ -1,5 +1,4 @@
 import pytest
-
 from app.services.cost import calculate_cost, get_pricing
 
 

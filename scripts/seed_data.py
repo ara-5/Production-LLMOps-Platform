@@ -15,7 +15,7 @@ import json
 import random
 import sys
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -25,13 +25,13 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT / "sdk"))
 
-from app.db import SessionLocal  # noqa: E402
-from app.models.datasets import Dataset, DatasetItem, DatasetVersion  # noqa: E402
-from app.models.evals import EvalScore  # noqa: E402
-from app.models.prompts import Prompt, PromptVersion  # noqa: E402
-from app.models.regression import RegressionTestItem, RegressionTestRun  # noqa: E402
-from app.models.traces import Span, Trace  # noqa: E402
-from llmops_sdk.pricing import calculate_cost  # noqa: E402
+from app.db import SessionLocal
+from app.models.datasets import Dataset, DatasetItem, DatasetVersion
+from app.models.evals import EvalScore
+from app.models.prompts import Prompt, PromptVersion
+from app.models.regression import RegressionTestRun
+from app.models.traces import Span, Trace
+from llmops_sdk.pricing import calculate_cost
 
 random.seed(42)
 np.random.seed(42)
@@ -108,7 +108,7 @@ def _sample_eval_score(metric: str) -> tuple[float, bool]:
 
 
 def backfill_traces(db, prompt_versions: list[PromptVersion], dataset_items: list[DatasetItem], days: int, traces_per_day: int) -> int:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     total = 0
     for day_offset in range(days, 0, -1):
         day_start = now - timedelta(days=day_offset)
@@ -235,8 +235,8 @@ def seed_baseline_regression_run(db, dataset_version: DatasetVersion, prompt_ver
             "cost_usd": {"count": 32, "mean": 0.0045, "p50": 0.0041, "p95": 0.0082},
             "note": "seeded baseline summary (synthetic) — run a real regression test via scripts/run_regression.py to replace it",
         },
-        started_at=datetime.now(timezone.utc) - timedelta(days=7),
-        ended_at=datetime.now(timezone.utc) - timedelta(days=7, minutes=-4),
+        started_at=datetime.now(UTC) - timedelta(days=7),
+        ended_at=datetime.now(UTC) - timedelta(days=7, minutes=-4),
     )
     db.add(run)
     db.commit()

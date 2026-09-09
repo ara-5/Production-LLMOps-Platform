@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -9,6 +11,8 @@ from app.schemas.regression import RegressionRunCreate, RegressionRunOut
 from app.services.regression.runner import run_regression_test
 from app.services.trace_client import get_trace_client, require_anthropic_key
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api/regression", tags=["regression"])
 
 
@@ -18,7 +22,12 @@ def _execute_run_in_background(run_id: int, limit: int | None) -> None:
     try:
         run_regression_test(run_id, db, get_trace_client(), settings.judge_model, limit)
     except Exception:
-        pass  # status already flipped to "error" inside run_regression_test
+        # run_regression_test already flips the run's own status to "error"
+        # and commits it before re-raising — this catch only stops the
+        # exception from propagating into FastAPI's BackgroundTasks runner,
+        # where nothing would observe it. Still log it: a silent failure
+        # here would otherwise be invisible outside the run's own DB row.
+        logger.exception("regression run %s failed", run_id)
     finally:
         db.close()
 

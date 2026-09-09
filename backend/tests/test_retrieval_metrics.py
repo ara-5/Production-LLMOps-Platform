@@ -1,6 +1,10 @@
 import pytest
-
-from app.services.eval_engine.retrieval_metrics import mrr, ndcg_at_k, precision_at_k, recall_at_k
+from app.services.eval_engine.retrieval_metrics import (
+    mrr,
+    ndcg_at_k,
+    precision_at_k,
+    recall_at_k,
+)
 
 
 def test_precision_at_k_all_relevant():

@@ -3,7 +3,6 @@ import types
 from unittest.mock import MagicMock
 
 import pytest
-
 from llmops_sdk.client import TraceClient
 from llmops_sdk.pricing import calculate_cost, get_pricing
 
@@ -174,9 +173,8 @@ def test_ollama_requires_base_url():
     fake_anthropic = MagicMock()
     trace_client = TraceClient(backend_url="http://unused", anthropic_client=fake_anthropic, ship=False)
 
-    with trace_client.trace("unit-test-ollama-no-url") as trace:
-        with pytest.raises(ValueError, match="base_url"):
-            trace.llm_call(model="ollama:llama3.2:3b", provider="ollama", messages=[{"role": "user", "content": "hi"}])
+    with trace_client.trace("unit-test-ollama-no-url") as trace, pytest.raises(ValueError, match="base_url"):
+        trace.llm_call(model="ollama:llama3.2:3b", provider="ollama", messages=[{"role": "user", "content": "hi"}])
 
 
 def test_fallback_to_ollama_attributes_trace_to_the_span_that_succeeded():

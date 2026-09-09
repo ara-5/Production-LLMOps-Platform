@@ -10,7 +10,12 @@ from app.models.evals import EvalScore
 from app.models.prompts import PromptVersion
 from app.models.traces import Trace
 from app.services.eval_engine import retrieval_metrics
-from app.services.eval_engine.judges import JudgeResult, score_faithfulness, score_hallucination, score_relevance
+from app.services.eval_engine.judges import (
+    JudgeResult,
+    score_faithfulness,
+    score_hallucination,
+    score_relevance,
+)
 
 DEFAULT_LLM_METRICS = ["hallucination", "faithfulness", "relevance"]
 RETRIEVAL_METRICS = ["precision_at_k", "recall_at_k", "mrr", "ndcg"]
@@ -109,7 +114,9 @@ def evaluate_dataset_item(
 ) -> tuple[str, list[EvalScore]]:
     """Run the demo RAG pipeline for one golden dataset item, persist the
     resulting trace, then score it. Returns (trace_id, eval_scores)."""
-    from demo_app.rag_pipeline import answer_question  # local import avoids a circular dependency at module load
+    from demo_app.rag_pipeline import (
+        answer_question,  # local import avoids a circular dependency at module load
+    )
 
     rag_answer = answer_question(
         question=item.question,

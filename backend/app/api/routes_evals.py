@@ -5,7 +5,13 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db import get_db
 from app.models.evals import EvalScore
-from app.schemas.evals import EvalScoreResult, EvalSummaryResponse, MetricSummary, ScoreTraceRequest, ScoreTraceResponse
+from app.schemas.evals import (
+    EvalScoreResult,
+    EvalSummaryResponse,
+    MetricSummary,
+    ScoreTraceRequest,
+    ScoreTraceResponse,
+)
 from app.schemas.traces import EvalScoreOut
 from app.services.eval_engine.runner import evaluate_trace
 from app.services.stats_utils import summarize as _summarize

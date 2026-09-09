@@ -1,5 +1,4 @@
 import pytest
-
 from app import models  # noqa: F401  (registers all models on Base.metadata)
 from app.db import Base, engine
 

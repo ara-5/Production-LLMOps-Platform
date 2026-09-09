@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -23,4 +33,4 @@ class EvalScore(Base):
     judge_trace_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
-    trace: Mapped["Trace"] = relationship(back_populates="eval_scores")
+    trace: Mapped["Trace"] = relationship(back_populates="eval_scores")  # noqa: F821 — resolved by SQLAlchemy's mapper registry at runtime

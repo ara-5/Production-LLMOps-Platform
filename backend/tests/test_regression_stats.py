@@ -1,5 +1,4 @@
 import pytest
-
 from app.services.regression.stats import compare_to_baseline
 
 

@@ -1,0 +1,8 @@
+[tool.ruff]
+line-length = 130
+target-version = "py312"
+
+[tool.ruff.lint]
+ignore = [
+    "B008", # FastAPI's Depends(...)/Query(...) in a default argument is the intended pattern, not a bug
+]

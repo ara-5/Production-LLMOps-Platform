@@ -22,11 +22,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "backend"))
 sys.path.insert(0, str(ROOT / "sdk"))
 
-from app.config import get_settings  # noqa: E402
-from app.db import SessionLocal  # noqa: E402
-from app.models.regression import RegressionTestRun  # noqa: E402
-from app.services.regression.runner import run_regression_test  # noqa: E402
-from app.services.trace_client import get_trace_client  # noqa: E402
+from app.config import get_settings
+from app.db import SessionLocal
+from app.models.regression import RegressionTestRun
+from app.services.regression.runner import run_regression_test
+from app.services.trace_client import get_trace_client
 
 
 def main() -> int:

@@ -1,6 +1,16 @@
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -46,7 +56,7 @@ class Trace(Base):
     spans: Mapped[list["Span"]] = relationship(
         back_populates="trace", cascade="all, delete-orphan", order_by="Span.started_at"
     )
-    eval_scores: Mapped[list["EvalScore"]] = relationship(back_populates="trace", cascade="all, delete-orphan")
+    eval_scores: Mapped[list["EvalScore"]] = relationship(back_populates="trace", cascade="all, delete-orphan")  # noqa: F821 — resolved by SQLAlchemy's mapper registry at runtime
 
 
 class Span(Base):

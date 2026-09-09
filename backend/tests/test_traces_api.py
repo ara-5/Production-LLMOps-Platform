@@ -1,15 +1,14 @@
 import uuid
-from datetime import datetime, timezone
-
-from fastapi.testclient import TestClient
+from datetime import UTC, datetime
 
 from app.main import app
+from fastapi.testclient import TestClient
 
 client = TestClient(app)
 
 
 def _ingest_payload(trace_id: str) -> dict:
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
     return {
         "trace": {
             "trace_id": trace_id,

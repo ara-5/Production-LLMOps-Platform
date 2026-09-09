@@ -1,16 +1,16 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 
 def _default_since(since: datetime | None) -> datetime:
-    return since or (datetime.now(timezone.utc) - timedelta(days=14))
+    return since or (datetime.now(UTC) - timedelta(days=14))
 
 
 def overview_metrics(db: Session, since: datetime | None = None, until: datetime | None = None) -> dict:
     since = _default_since(since)
-    until = until or datetime.now(timezone.utc)
+    until = until or datetime.now(UTC)
     row = db.execute(
         text(
             """

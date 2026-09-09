@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from llmops_sdk import TraceClient
 from sqlalchemy import select
@@ -82,12 +82,12 @@ def run_regression_test(
             run.status = "passed"
 
         run.summary = summary
-        run.ended_at = datetime.now(timezone.utc)
+        run.ended_at = datetime.now(UTC)
         db.commit()
         db.refresh(run)
         return run
     except Exception:
         run.status = "error"
-        run.ended_at = datetime.now(timezone.utc)
+        run.ended_at = datetime.now(UTC)
         db.commit()
         raise

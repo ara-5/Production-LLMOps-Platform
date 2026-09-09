@@ -5,8 +5,9 @@ feeds the observability dashboard, the eval engine, and regression tests."""
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 from llmops_sdk import TraceClient
 from llmops_sdk import otel_attrs as attrs
