@@ -12,11 +12,15 @@ PRICING_TABLE: dict[str, dict[str, float]] = {
 }
 
 DEFAULT_PRICING = {"input": 3.00, "output": 15.00, "cache_read": 0.30, "cache_write": 3.75}
+OLLAMA_PRICING = {"input": 0.0, "output": 0.0, "cache_read": 0.0, "cache_write": 0.0}
+OLLAMA_MODEL_PREFIX = "ollama:"
 
 _PER_MILLION = 1_000_000
 
 
 def get_pricing(model_id: str) -> dict[str, float]:
+    if model_id.startswith(OLLAMA_MODEL_PREFIX):
+        return OLLAMA_PRICING  # local inference — no per-token API cost
     return PRICING_TABLE.get(model_id, DEFAULT_PRICING)
 
 

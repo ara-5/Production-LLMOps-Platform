@@ -20,6 +20,7 @@ It ships as a working system, not a slide deck: a real instrumentation SDK, a Fa
 | **Model versions** | Every trace records the exact `model_id` used; regression tests compare across model/prompt combinations |
 | **Evaluation datasets** | Versioned golden Q&A datasets with expected answers + expected retrieval doc IDs |
 | **Regression testing** | Run a dataset against a prompt/model version, score it, and compare to a stored baseline with per-metric pass/fail thresholds — a CLI exit code makes it usable as a CI gate ([`scripts/run_regression.py`](scripts/run_regression.py)) |
+| **Provider resilience** | Optional local **Ollama fallback** for the demo app — if Claude errors out (or no key is configured), the pipeline retries on a local model and the trace records the failover ([see below](#local-ollama-fallback)) |
 
 ## Architecture
 
@@ -97,6 +98,20 @@ python scripts/run_regression.py --dataset-version-id 1 --prompt-version-id 1 \
 
 `run_regression.py` exits `0` on pass and `1` on regression, so it drops straight into a CI pipeline as a gate on prompt/model changes.
 
+## Local Ollama fallback
+
+The demo app's generation step (not eval judges, and not regression testing — both of those need a real frontier model to grade reliably) can fall back to a local [Ollama](https://ollama.com) model if Claude is unreachable, so the dashboard's live path keeps working with zero cloud spend or even zero API key. It's off by default; turn it on in `.env`:
+
+```bash
+ENABLE_OLLAMA_FALLBACK=true
+OLLAMA_BASE_URL=http://host.docker.internal:11434   # reaches Ollama running on your host machine from inside the container
+OLLAMA_MODEL=llama3.2:3b                             # any model you've pulled: `ollama pull llama3.2:3b`
+```
+
+Install Ollama, pull a model, and make sure it's running (`ollama serve`, or the desktop app) before starting the stack. When the primary call to Claude fails for any reason, `demo_app/rag_pipeline.py` retries with Ollama within the *same* trace — the dashboard shows both the failed span and the successful fallback span in the waterfall, tags the trace `fallback_used: true`, and prices the fallback call at $0 (see [`sdk/llmops_sdk/pricing.py`](sdk/llmops_sdk/pricing.py)). A nonzero fallback rate across traces is itself a useful reliability signal — it means the primary provider is flaky.
+
+This was verified live in development: with `ANTHROPIC_API_KEY` unset and the fallback enabled, `/demo/ask` correctly retried on `ollama:llama3.2:3b` and returned a grounded answer at `cost_usd: 0.0`, with the trace recording `status: ok`, `model_id: ollama:llama3.2:3b`, and the fallback tags.
+
 ## Local development (without Docker)
 
 ```bash
@@ -121,7 +136,7 @@ DATABASE_URL=postgresql+psycopg://llmops:llmops@localhost:5432/llmops \
     pytest backend/tests sdk/tests -v
 ```
 
-31 tests covering: cost calculation against the pricing table (including cache read/write rates), retrieval-quality metrics against hand-computed fixtures, regression baseline-comparison threshold logic, the SDK's trace/span capture against a mocked Anthropic stream, and the traces ingest/query API end-to-end against a real Postgres instance. `.github/workflows/ci.yml` runs the same suite plus a frontend type-check/build against a Postgres service container — it's set to manual trigger (`workflow_dispatch`) rather than running on every push, so it's there to run on demand from the Actions tab without consuming CI minutes automatically.
+35 tests covering: cost calculation against the pricing table (including cache read/write rates and the Ollama free tier), retrieval-quality metrics against hand-computed fixtures, regression baseline-comparison threshold logic, the SDK's trace/span capture against both a mocked Anthropic stream and a mocked Ollama NDJSON stream (including the fallback-attribution behavior itself), and the traces ingest/query API end-to-end against a real Postgres instance. `.github/workflows/ci.yml` runs the same suite plus a frontend type-check/build against a Postgres service container — it's set to manual trigger (`workflow_dispatch`) rather than running on every push, so it's there to run on demand from the Actions tab without consuming CI minutes automatically.
 
 ## Project layout
 

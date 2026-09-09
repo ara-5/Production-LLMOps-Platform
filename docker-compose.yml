@@ -30,6 +30,11 @@ services:
       DEFAULT_MODEL: ${DEFAULT_MODEL:-claude-sonnet-5}
       JUDGE_MODEL: ${JUDGE_MODEL:-claude-opus-5}
       BACKEND_INTERNAL_URL: http://localhost:8000
+      ENABLE_OLLAMA_FALLBACK: ${ENABLE_OLLAMA_FALLBACK:-false}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # no-op on Docker Desktop (Win/Mac); required for host.docker.internal on Linux
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

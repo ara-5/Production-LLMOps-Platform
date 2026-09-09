@@ -12,6 +12,7 @@ export interface TraceListItem {
   output_tokens: number;
   cost_usd: number;
   is_synthetic: boolean;
+  tags: Record<string, unknown>;
 }
 
 export interface SpanOut {

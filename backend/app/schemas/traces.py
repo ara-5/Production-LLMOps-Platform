@@ -83,6 +83,7 @@ class TraceListItem(BaseModel):
     output_tokens: int
     cost_usd: float
     is_synthetic: bool
+    tags: dict = {}
 
 
 class TraceDetail(TraceListItem):

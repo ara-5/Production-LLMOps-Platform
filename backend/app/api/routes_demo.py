@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.db import get_db
 from app.models.prompts import Prompt, PromptVersion
 from app.schemas.demo import AskRequest, AskResponse, SourceOut
-from app.services.trace_client import get_trace_client, require_anthropic_key
+from app.services.trace_client import get_trace_client
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 
@@ -42,8 +42,12 @@ def _resolve_prompt_version(db: Session, prompt_version_id: int | None) -> Promp
 def ask(payload: AskRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     from demo_app.rag_pipeline import answer_question  # local import: keeps demo_app decoupled from api package
 
-    require_anthropic_key()
     settings = get_settings()
+    if not settings.anthropic_api_key and not settings.enable_ollama_fallback:
+        raise HTTPException(
+            status_code=503,
+            detail="Neither ANTHROPIC_API_KEY nor ENABLE_OLLAMA_FALLBACK is configured — this endpoint needs at least one generation provider.",
+        )
     prompt_version = _resolve_prompt_version(db, payload.prompt_version_id)
     model_id = payload.model_id or settings.default_model
     trace_client = get_trace_client()
@@ -55,6 +59,9 @@ def ask(payload: AskRequest, background_tasks: BackgroundTasks, db: Session = De
         trace_client=trace_client,
         k=payload.k,
         on_complete=lambda ingest_payload: background_tasks.add_task(trace_client.ship_async_httpx, ingest_payload),
+        ollama_fallback_enabled=settings.enable_ollama_fallback,
+        ollama_model=settings.ollama_model,
+        ollama_base_url=settings.ollama_base_url,
     )
 
     return AskResponse(

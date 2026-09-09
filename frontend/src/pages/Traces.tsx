@@ -98,6 +98,11 @@ export default function Traces() {
                     <td>${t.cost_usd.toFixed(5)}</td>
                     <td>
                       <span className="badge badge-neutral">{t.is_synthetic ? "synthetic" : "live"}</span>
+                      {t.tags?.fallback_used === true && (
+                        <span className="badge badge-warn" style={{ marginLeft: 6 }} title="Primary provider failed; recovered via local Ollama fallback">
+                          fallback
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

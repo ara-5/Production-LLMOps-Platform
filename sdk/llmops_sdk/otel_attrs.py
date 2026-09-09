@@ -27,3 +27,9 @@ LLMOPS_QUESTION = "llmops.input.question"
 LLMOPS_ANSWER = "llmops.output.answer"
 
 ANTHROPIC_SYSTEM = "anthropic"
+OLLAMA_SYSTEM = "ollama"
+
+LLMOPS_FALLBACK_USED = "llmops.fallback.used"
+LLMOPS_FALLBACK_FROM_PROVIDER = "llmops.fallback.from_provider"
+LLMOPS_FALLBACK_FROM_MODEL = "llmops.fallback.from_model"
+LLMOPS_FALLBACK_REASON = "llmops.fallback.reason"

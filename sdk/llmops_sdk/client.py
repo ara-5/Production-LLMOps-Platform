@@ -1,5 +1,6 @@
-"""Instrumentation SDK: wraps Anthropic Messages API calls inside traces/spans
-and ships them to the platform's ingest API.
+"""Instrumentation SDK: wraps LLM calls (Anthropic Claude, with an optional
+local Ollama fallback) inside traces/spans and ships them to the platform's
+ingest API.
 
 Usage:
 
@@ -9,10 +10,18 @@ Usage:
             chunks = retriever.retrieve(question)
             span.set_attributes(**{"llmops.retrieval.doc_ids": [c.doc_id for c in chunks]})
         result = trace.llm_call(model="claude-sonnet-5", messages=[...])
+
+        # Or, to call a local Ollama model instead of Claude (e.g. as a
+        # resilience fallback when Claude is unavailable):
+        result = trace.llm_call(
+            model="ollama:llama3.2:3b", provider="ollama",
+            base_url="http://localhost:11434", messages=[...],
+        )
 """
 
 from __future__ import annotations
 
+import json
 import time
 import uuid
 from contextlib import contextmanager
@@ -24,7 +33,7 @@ import anthropic
 import httpx
 
 from . import otel_attrs as attrs
-from .pricing import calculate_cost
+from .pricing import OLLAMA_MODEL_PREFIX, calculate_cost
 
 
 def _now_ms() -> float:
@@ -35,7 +44,15 @@ def _iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=timezone.utc).isoformat()
 
 
-def _classify_error(exc: BaseException) -> str:
+def _classify_error(exc: BaseException, provider: str = "anthropic") -> str:
+    if provider == "ollama":
+        if isinstance(exc, httpx.ConnectError):
+            return "connection_error"
+        if isinstance(exc, httpx.TimeoutException):
+            return "timeout"
+        if isinstance(exc, httpx.HTTPStatusError):
+            return "api_error"
+        return "other"
     if isinstance(exc, anthropic.APITimeoutError):
         return "timeout"
     if isinstance(exc, anthropic.RateLimitError):
@@ -60,6 +77,7 @@ class LLMCallResult:
     cache_creation_tokens: int
     cost_usd: float
     stop_reason: Optional[str] = None
+    provider: str = "anthropic"
 
 
 @dataclass
@@ -173,6 +191,97 @@ class TraceContext:
             record.latency_ms = int((record.ended_at - record.started_at) * 1000)
             self._span_stack.pop()
 
+    def _call_anthropic(
+        self,
+        *,
+        model: str,
+        messages: list[dict],
+        system: Optional[str],
+        max_tokens: int,
+        thinking: Optional[dict],
+        output_config: Optional[dict],
+        extra_kwargs: dict,
+    ) -> tuple[Any, str, int, int, int, int, Optional[str], str, Optional[float], float]:
+        request_kwargs: dict[str, Any] = dict(model=model, max_tokens=max_tokens, messages=messages, **extra_kwargs)
+        if system is not None:
+            request_kwargs["system"] = system
+        if thinking is not None:
+            request_kwargs["thinking"] = thinking
+        if output_config is not None:
+            request_kwargs["output_config"] = output_config
+
+        t_first_token: Optional[float] = None
+        with self.trace_client.anthropic.messages.stream(**request_kwargs) as stream:
+            for event in stream:
+                if t_first_token is None and event.type == "content_block_delta":
+                    t_first_token = _now_ms()
+            message = stream.get_final_message()
+        t_end = _now_ms()
+
+        usage = message.usage
+        input_tokens = usage.input_tokens or 0
+        output_tokens = usage.output_tokens or 0
+        cache_read_tokens = getattr(usage, "cache_read_input_tokens", 0) or 0
+        cache_creation_tokens = getattr(usage, "cache_creation_input_tokens", 0) or 0
+        text = "".join(block.text for block in message.content if getattr(block, "type", None) == "text")
+
+        return (
+            message, text, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+            message.stop_reason, message.model, t_first_token, t_end,
+        )
+
+    def _call_ollama(
+        self,
+        *,
+        base_url: str,
+        model: str,
+        messages: list[dict],
+        system: Optional[str],
+        max_tokens: int,
+    ) -> tuple[Any, str, int, int, int, int, Optional[str], str, Optional[float], float]:
+        ollama_model = model[len(OLLAMA_MODEL_PREFIX):] if model.startswith(OLLAMA_MODEL_PREFIX) else model
+        payload_messages = list(messages)
+        if system is not None:
+            payload_messages = [{"role": "system", "content": system}] + payload_messages
+
+        body = {
+            "model": ollama_model,
+            "messages": payload_messages,
+            "stream": True,
+            "options": {"num_predict": max_tokens},
+        }
+
+        t_first_token: Optional[float] = None
+        text_parts: list[str] = []
+        input_tokens = 0
+        output_tokens = 0
+        stop_reason = "stop"
+        response_model = ollama_model
+        final_chunk: dict = {}
+
+        with self.trace_client.ollama_http.stream("POST", f"{base_url.rstrip('/')}/api/chat", json=body) as resp:
+            resp.raise_for_status()
+            for line in resp.iter_lines():
+                if not line:
+                    continue
+                chunk = json.loads(line)
+                content = chunk.get("message", {}).get("content", "")
+                if content:
+                    if t_first_token is None:
+                        t_first_token = _now_ms()
+                    text_parts.append(content)
+                if chunk.get("done"):
+                    final_chunk = chunk
+        t_end = _now_ms()
+
+        input_tokens = final_chunk.get("prompt_eval_count", 0) or 0
+        output_tokens = final_chunk.get("eval_count", 0) or 0
+        stop_reason = final_chunk.get("done_reason", stop_reason)
+        response_model = final_chunk.get("model", response_model)
+        text = "".join(text_parts)
+
+        return (final_chunk, text, input_tokens, output_tokens, 0, 0, stop_reason, response_model, t_first_token, t_end)
+
     def llm_call(
         self,
         *,
@@ -182,13 +291,20 @@ class TraceContext:
         max_tokens: int = 16000,
         thinking: Optional[dict] = None,
         output_config: Optional[dict] = None,
+        provider: str = "anthropic",
+        base_url: Optional[str] = None,
         span_kind: str = "llm",
         span_name: str = "llm.generate",
         **kwargs: Any,
     ) -> LLMCallResult:
+        if provider not in ("anthropic", "ollama"):
+            raise ValueError(f"unknown provider {provider!r} — expected 'anthropic' or 'ollama'")
+        if provider == "ollama" and not base_url:
+            raise ValueError("base_url is required when provider='ollama'")
+
         with self.span(span_name, kind=span_kind) as span:
             span.set_attributes(**{
-                attrs.GEN_AI_SYSTEM: attrs.ANTHROPIC_SYSTEM,
+                attrs.GEN_AI_SYSTEM: attrs.OLLAMA_SYSTEM if provider == "ollama" else attrs.ANTHROPIC_SYSTEM,
                 attrs.GEN_AI_OPERATION_NAME: "chat",
                 attrs.GEN_AI_REQUEST_MODEL: model,
                 attrs.GEN_AI_REQUEST_MAX_TOKENS: max_tokens,
@@ -196,42 +312,30 @@ class TraceContext:
             if thinking:
                 span.set_attributes(**{attrs.LLMOPS_THINKING_TYPE: thinking.get("type")})
 
-            request_kwargs: dict[str, Any] = dict(model=model, max_tokens=max_tokens, messages=messages, **kwargs)
-            if system is not None:
-                request_kwargs["system"] = system
-            if thinking is not None:
-                request_kwargs["thinking"] = thinking
-            if output_config is not None:
-                request_kwargs["output_config"] = output_config
-
             t0 = _now_ms()
-            t_first_token: Optional[float] = None
             try:
-                with self.trace_client.anthropic.messages.stream(**request_kwargs) as stream:
-                    for event in stream:
-                        if t_first_token is None and event.type == "content_block_delta":
-                            t_first_token = _now_ms()
-                    message = stream.get_final_message()
+                if provider == "ollama":
+                    (raw, text, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+                     stop_reason, response_model, t_first_token, t_end) = self._call_ollama(
+                        base_url=base_url, model=model, messages=messages, system=system, max_tokens=max_tokens
+                    )
+                else:
+                    (raw, text, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens,
+                     stop_reason, response_model, t_first_token, t_end) = self._call_anthropic(
+                        model=model, messages=messages, system=system, max_tokens=max_tokens,
+                        thinking=thinking, output_config=output_config, extra_kwargs=kwargs,
+                    )
             except Exception as exc:
                 span.set_error(str(exc))
                 self.status = "error"
-                self.error_type = _classify_error(exc)
+                self.error_type = _classify_error(exc, provider)
                 raise
-            t_end = _now_ms()
 
-            usage = message.usage
-            input_tokens = usage.input_tokens or 0
-            output_tokens = usage.output_tokens or 0
-            cache_read_tokens = getattr(usage, "cache_read_input_tokens", 0) or 0
-            cache_creation_tokens = getattr(usage, "cache_creation_input_tokens", 0) or 0
             cost_usd = calculate_cost(model, input_tokens, output_tokens, cache_read_tokens, cache_creation_tokens)
-
             ttft_ms = int((t_first_token or t_end) - t0)
             latency_ms = int(t_end - t0)
             gen_ms = max(t_end - (t_first_token or t0), 1.0)
             tokens_per_sec = output_tokens / (gen_ms / 1000.0)
-
-            text = "".join(block.text for block in message.content if getattr(block, "type", None) == "text")
 
             span.set_usage(
                 input_tokens=input_tokens,
@@ -241,8 +345,8 @@ class TraceContext:
                 cost_usd=cost_usd,
             )
             span.set_attributes(**{
-                attrs.GEN_AI_RESPONSE_MODEL: message.model,
-                attrs.GEN_AI_RESPONSE_FINISH_REASONS: [message.stop_reason],
+                attrs.GEN_AI_RESPONSE_MODEL: response_model,
+                attrs.GEN_AI_RESPONSE_FINISH_REASONS: [stop_reason],
                 attrs.GEN_AI_USAGE_INPUT_TOKENS: input_tokens,
                 attrs.GEN_AI_USAGE_OUTPUT_TOKENS: output_tokens,
                 attrs.LLMOPS_USAGE_CACHE_READ_TOKENS: cache_read_tokens,
@@ -253,7 +357,7 @@ class TraceContext:
             })
 
             return LLMCallResult(
-                message=message,
+                message=raw,
                 text=text,
                 ttft_ms=ttft_ms,
                 latency_ms=latency_ms,
@@ -263,14 +367,20 @@ class TraceContext:
                 cache_read_tokens=cache_read_tokens,
                 cache_creation_tokens=cache_creation_tokens,
                 cost_usd=cost_usd,
-                stop_reason=message.stop_reason,
+                stop_reason=stop_reason,
+                provider=provider,
             )
 
     def _primary_llm_span(self) -> Optional[_SpanRecord]:
-        for s in self.spans:
-            if s.span_kind in ("llm", "judge"):
+        """The span that actually produced the result shown to the user —
+        the last successful llm/judge call, so a failed-then-fallback
+        sequence attributes model_id/ttft/tokens_per_sec to the call that
+        won, not the one that failed first."""
+        candidates = [s for s in self.spans if s.span_kind in ("llm", "judge")]
+        for s in reversed(candidates):
+            if s.status == "ok":
                 return s
-        return None
+        return candidates[-1] if candidates else None
 
     def to_payload(self) -> dict:
         primary = self._primary_llm_span()
@@ -309,7 +419,7 @@ class TraceContext:
 
 
 class TraceClient:
-    """Entry point for instrumenting Anthropic calls and shipping traces."""
+    """Entry point for instrumenting LLM calls and shipping traces."""
 
     def __init__(
         self,
@@ -321,6 +431,7 @@ class TraceClient:
         self.anthropic = anthropic_client or anthropic.Anthropic()
         self.ship = ship
         self._http = httpx.Client(timeout=10.0)
+        self.ollama_http = httpx.Client(timeout=120.0)
 
     @contextmanager
     def trace(

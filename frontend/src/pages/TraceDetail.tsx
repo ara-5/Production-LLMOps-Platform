@@ -112,6 +112,11 @@ export default function TraceDetail() {
             {trace.model_id ?? "—"}
           </div>
           {trace.prompt_version_id && <div className="kpi-sub">prompt v{trace.prompt_version_id}</div>}
+          {trace.tags?.fallback_used === true && (
+            <div className="kpi-sub">
+              <span className="badge badge-warn">fallback</span> from {String(trace.tags.fallback_from_model ?? "primary provider")}
+            </div>
+          )}
         </div>
         <div className="kpi-card">
           <div className="kpi-label">Tokens</div>
