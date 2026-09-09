@@ -6,7 +6,7 @@ from app.config import get_settings
 from app.db import get_db
 from app.models.prompts import Prompt, PromptVersion
 from app.schemas.demo import AskRequest, AskResponse, SourceOut
-from app.services.trace_client import get_trace_client
+from app.services.trace_client import get_trace_client, require_anthropic_key
 
 router = APIRouter(prefix="/demo", tags=["demo"])
 
@@ -42,6 +42,7 @@ def _resolve_prompt_version(db: Session, prompt_version_id: int | None) -> Promp
 def ask(payload: AskRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     from demo_app.rag_pipeline import answer_question  # local import: keeps demo_app decoupled from api package
 
+    require_anthropic_key()
     settings = get_settings()
     prompt_version = _resolve_prompt_version(db, payload.prompt_version_id)
     model_id = payload.model_id or settings.default_model

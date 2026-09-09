@@ -9,13 +9,14 @@ from app.schemas.evals import EvalScoreResult, EvalSummaryResponse, MetricSummar
 from app.schemas.traces import EvalScoreOut
 from app.services.eval_engine.runner import evaluate_trace
 from app.services.stats_utils import summarize as _summarize
-from app.services.trace_client import get_trace_client
+from app.services.trace_client import get_trace_client, require_anthropic_key
 
 router = APIRouter(prefix="/api/evals", tags=["evals"])
 
 
 @router.post("/score-trace/{trace_id}", response_model=ScoreTraceResponse)
 def score_trace(trace_id: str, payload: ScoreTraceRequest, db: Session = Depends(get_db)):
+    require_anthropic_key()
     settings = get_settings()
     try:
         scores = evaluate_trace(trace_id, db, get_trace_client(), settings.judge_model, payload.metrics)

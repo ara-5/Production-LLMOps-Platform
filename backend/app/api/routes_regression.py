@@ -7,7 +7,7 @@ from app.db import SessionLocal, get_db
 from app.models.regression import RegressionTestRun
 from app.schemas.regression import RegressionRunCreate, RegressionRunOut
 from app.services.regression.runner import run_regression_test
-from app.services.trace_client import get_trace_client
+from app.services.trace_client import get_trace_client, require_anthropic_key
 
 router = APIRouter(prefix="/api/regression", tags=["regression"])
 
@@ -25,6 +25,7 @@ def _execute_run_in_background(run_id: int, limit: int | None) -> None:
 
 @router.post("/runs", response_model=RegressionRunOut, status_code=201)
 def create_regression_run(payload: RegressionRunCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    require_anthropic_key()
     run = RegressionTestRun(
         name=payload.name,
         dataset_version_id=payload.dataset_version_id,
